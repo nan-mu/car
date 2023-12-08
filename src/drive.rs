@@ -13,7 +13,7 @@ pub enum Gear {
 }
 pub enum Diversion {
     straight,
-    turn(i8),
+    turn(u64),
 }
 
 pub struct ControlMes {
@@ -28,11 +28,13 @@ pub struct ControlMes {
 pub enum LaunchMode {
     Sleep,
     Debug,
+    DeadWhell,
 }
 
 pub struct ControlManger {
     motor_pwm: (gpio::OutputPin, gpio::OutputPin), // 电机控制引脚，第一个为正向驱动引脚
     senvo_pwm: gpio::OutputPin,                    // 舵机控制引脚
+    motor_tasks: Vec<ControlMes>,
     launch_mode: LaunchMode,
 }
 
@@ -45,23 +47,46 @@ impl ControlManger {
                 Gpio::new().unwrap().get(16).unwrap().into_output_low(),
             ),
             senvo_pwm: Gpio::new().unwrap().get(20).unwrap().into_output(),
+            motor_tasks: vec![],
             launch_mode,
         }
     }
     #[doc = "启动调度器"]
-    pub fn launch(mut self) -> Self {
+    pub fn load_stats(mut self) -> Self {
         match self.launch_mode {
             LaunchMode::Debug => {
-                // 计划电机制动，舵机微微转向
-                let debug_task =
-                    ControlMes::new(Gear::Brake, Diversion::straight, Duration::from_secs(10));
-                self.run_motor(&debug_task).unwrap();
-                self.run_senvo(&debug_task).unwrap();
-                thread::sleep(Duration::from_secs(10));
+                self.motor_tasks.push(ControlMes::new(
+                    Gear::Ahead(0.1),
+                    Diversion::turn(1250),
+                    Duration::from_secs(10),
+                ));
+                self.motor_tasks.push(ControlMes::new(
+                    Gear::Brake,
+                    Diversion::straight,
+                    Duration::from_secs(10),
+                ));
+                self.motor_tasks.push(ControlMes::new(
+                    Gear::Reverse(0.1),
+                    Diversion::turn(1450),
+                    Duration::from_secs(10),
+                ));
+                self.motor_tasks.push(ControlMes::new(
+                    Gear::Drift,
+                    Diversion::straight,
+                    Duration::from_secs(10),
+                ));
             }
+            LaunchMode::DeadWhell => {}
             LaunchMode::Sleep => (),
         };
         self
+    }
+    pub fn launch(mut self) {
+        for task in self.motor_tasks {
+            self.run_motor(&task);
+            self.run_senvo(&task);
+            thread::sleep(task.duration)
+        }
     }
     pub fn reset(mut self) -> Self {
         self.motor_pwm = (
@@ -72,6 +97,7 @@ impl ControlManger {
         self.launch_mode = LaunchMode::Sleep;
         self
     }
+    pub fn break_motor(mut self) -> Self {}
     #[doc = "电机需要两路PWM，计划使用P20，P16，供电板上标记为P28,P2。然后控制使用百分比，因为这是油门的参数"]
     fn run_motor(&mut self, mes: &ControlMes) -> Result<()> {
         match mes.mode {
@@ -116,4 +142,9 @@ impl ControlMes {
             duration,
         }
     }
+}
+
+#[doc = "该函数计算路程所需的时间，具体内容有待实验数据"]
+fn route2duration(lenght: u64) -> Duration {
+    Duration::from_micros(lenght / 60)
 }
