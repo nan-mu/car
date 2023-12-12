@@ -1,4 +1,4 @@
-use num;
+#[warn(dead_code)]
 /// 包含电机的驱动和舵机的驱动。同时包含一个运动调度。
 /// 这里所有的控制信号都是PWM，但由于需要使用耳机口放音乐，所以PWM信号只能找一个普通端口然后模拟输出PWM信号
 use rppal::gpio::{self, Gpio, Result};
@@ -12,8 +12,8 @@ pub enum Gear {
     Brake,        // 制动，PWM=(1,1)
 }
 pub enum Diversion {
-    straight,
-    turn(u64),
+    Straight,
+    Turn(u64),
 }
 
 pub struct ControlMes {
@@ -23,6 +23,7 @@ pub struct ControlMes {
     diversion: Diversion,
     /// 控制信号持续时间
     duration: Duration,
+    /// 任务执行时间
 }
 
 pub enum LaunchMode {
@@ -46,58 +47,66 @@ impl ControlManger {
                 Gpio::new().unwrap().get(20).unwrap().into_output_low(),
                 Gpio::new().unwrap().get(16).unwrap().into_output_low(),
             ),
-            senvo_pwm: Gpio::new().unwrap().get(20).unwrap().into_output(),
+            senvo_pwm: Gpio::new().unwrap().get(28).unwrap().into_output(),
             motor_tasks: vec![],
             launch_mode,
         }
     }
     #[doc = "启动调度器"]
-    pub fn load_stats(mut self) -> Self {
+    pub fn load_stats(&mut self) -> Result<()> {
         match self.launch_mode {
             LaunchMode::Debug => {
                 self.motor_tasks.push(ControlMes::new(
                     Gear::Ahead(0.1),
-                    Diversion::turn(1250),
+                    Diversion::Turn(1250),
                     Duration::from_secs(10),
                 ));
                 self.motor_tasks.push(ControlMes::new(
                     Gear::Brake,
-                    Diversion::straight,
+                    Diversion::Straight,
                     Duration::from_secs(10),
                 ));
                 self.motor_tasks.push(ControlMes::new(
                     Gear::Reverse(0.1),
-                    Diversion::turn(1450),
+                    Diversion::Turn(1450),
                     Duration::from_secs(10),
                 ));
                 self.motor_tasks.push(ControlMes::new(
                     Gear::Drift,
-                    Diversion::straight,
+                    Diversion::Straight,
                     Duration::from_secs(10),
                 ));
             }
             LaunchMode::DeadWhell => {}
             LaunchMode::Sleep => (),
         };
-        self
+        Ok(())
     }
-    pub fn launch(mut self) {
-        for task in self.motor_tasks {
-            self.run_motor(&task);
-            self.run_senvo(&task);
-            thread::sleep(task.duration)
-        }
+    pub fn launch(&mut self) {
+        self.load_stats().unwrap();
+        self.run_motor(&ControlMes::new(
+            Gear::Ahead(1.0),
+            Diversion::Turn(1250),
+            Duration::from_secs(10),
+        ))
+        .unwrap();
+        self.run_senvo(&ControlMes::new(
+            Gear::Ahead(1.0),
+            Diversion::Turn(1250),
+            Duration::from_secs(10),
+        ))
+        .unwrap();
+        thread::sleep(self.motor_tasks[0].duration);
     }
     pub fn reset(mut self) -> Self {
         self.motor_pwm = (
             Gpio::new().unwrap().get(20).unwrap().into_output_low(),
             Gpio::new().unwrap().get(16).unwrap().into_output_low(),
         );
-        self.senvo_pwm = Gpio::new().unwrap().get(20).unwrap().into_output();
+        self.senvo_pwm = Gpio::new().unwrap().get(21).unwrap().into_output();
         self.launch_mode = LaunchMode::Sleep;
         self
     }
-    pub fn break_motor(mut self) -> Self {}
     #[doc = "电机需要两路PWM，计划使用P20，P16，供电板上标记为P28,P2。然后控制使用百分比，因为这是油门的参数"]
     fn run_motor(&mut self, mes: &ControlMes) -> Result<()> {
         match mes.mode {
@@ -123,10 +132,10 @@ impl ControlManger {
     #[doc = "控制电机只需要一路PWM，板载5V驱动，总共三个脚"]
     fn run_senvo(&mut self, mes: &ControlMes) -> Result<()> {
         match mes.diversion {
-            Diversion::straight => self
+            Diversion::Straight => self
                 .senvo_pwm
                 .set_pwm(Duration::from_millis(20), Duration::from_micros(1250)),
-            Diversion::turn(direction) => self.senvo_pwm.set_pwm(
+            Diversion::Turn(direction) => self.senvo_pwm.set_pwm(
                 Duration::from_millis(20),
                 Duration::from_micros(direction as u64), // 未完成
             ),
