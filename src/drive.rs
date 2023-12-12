@@ -91,17 +91,23 @@ impl ControlManger {
     }
     pub fn launch(&mut self) {
         self.load_stats().unwrap();
-        self.run_motor(&ControlMes::new(
-            Gear::Ahead(1.0),
-            Diversion::Turn(1250),
-            Duration::from_secs(10),
-        ))
+        run_motor(
+            &mut self.motor_pwm,
+            &ControlMes::new(
+                Gear::Ahead(1.0),
+                Diversion::Turn(1250),
+                Duration::from_secs(10),
+            ),
+        )
         .unwrap();
-        self.run_senvo(&ControlMes::new(
-            Gear::Ahead(1.0),
-            Diversion::Turn(1250),
-            Duration::from_secs(10),
-        ))
+        run_senvo(
+            &mut self.senvo_pwm,
+            &ControlMes::new(
+                Gear::Ahead(1.0),
+                Diversion::Turn(1250),
+                Duration::from_secs(10),
+            ),
+        )
         .unwrap();
         thread::sleep(self.motor_tasks[0].duration);
     }
@@ -113,40 +119,6 @@ impl ControlManger {
         self.senvo_pwm = Gpio::new().unwrap().get(21).unwrap().into_output();
         self.launch_mode = LaunchMode::Sleep;
         self
-    }
-    #[doc = "电机需要两路PWM，计划使用P20，P16，供电板上标记为P28,P2。然后控制使用百分比，因为这是油门的参数"]
-    fn run_motor(&mut self, mes: &ControlMes) -> Result<()> {
-        match mes.mode {
-            Gear::Drift => {
-                self.motor_pwm.0.write(gpio::Level::Low);
-                self.motor_pwm.1.write(gpio::Level::Low);
-            }
-            Gear::Ahead(accelerator) => {
-                self.motor_pwm.0.set_pwm_frequency(50 as f64, accelerator)?;
-                self.motor_pwm.1.write(gpio::Level::Low);
-            }
-            Gear::Reverse(accelerator) => {
-                self.motor_pwm.1.set_pwm_frequency(50 as f64, accelerator)?;
-                self.motor_pwm.0.write(gpio::Level::Low);
-            }
-            Gear::Brake => {
-                self.motor_pwm.0.write(gpio::Level::High);
-                self.motor_pwm.1.write(gpio::Level::High);
-            }
-        }
-        Ok(())
-    }
-    #[doc = "控制电机只需要一路PWM，板载5V驱动，总共三个脚"]
-    fn run_senvo(&mut self, mes: &ControlMes) -> Result<()> {
-        match mes.diversion {
-            Diversion::Straight => self
-                .senvo_pwm
-                .set_pwm(Duration::from_millis(20), Duration::from_micros(1250)),
-            Diversion::Turn(direction) => self.senvo_pwm.set_pwm(
-                Duration::from_millis(20),
-                Duration::from_micros(direction as u64), // 未完成
-            ),
-        }
     }
 }
 
@@ -168,4 +140,39 @@ impl ControlMes {
 #[doc = "该函数计算路程所需的时间，具体内容有待实验数据"]
 fn route2duration(lenght: u64) -> Duration {
     Duration::from_micros(lenght / 60)
+}
+
+#[doc = "电机需要两路PWM，计划使用P20，P16，供电板上标记为P28,P2。然后控制使用百分比，因为这是油门的参数"]
+fn run_motor(motor_pwm: &mut (gpio::OutputPin, gpio::OutputPin), mes: &ControlMes) -> Result<()> {
+    match mes.mode {
+        Gear::Drift => {
+            motor_pwm.0.write(gpio::Level::Low);
+            motor_pwm.1.write(gpio::Level::Low);
+        }
+        Gear::Ahead(accelerator) => {
+            motor_pwm.0.set_pwm_frequency(50 as f64, accelerator)?;
+            motor_pwm.1.write(gpio::Level::Low);
+        }
+        Gear::Reverse(accelerator) => {
+            motor_pwm.1.set_pwm_frequency(50 as f64, accelerator)?;
+            motor_pwm.0.write(gpio::Level::Low);
+        }
+        Gear::Brake => {
+            motor_pwm.0.write(gpio::Level::High);
+            motor_pwm.1.write(gpio::Level::High);
+        }
+    }
+    Ok(())
+}
+#[doc = "控制电机只需要一路PWM，板载5V驱动，总共三个脚"]
+fn run_senvo(senvo_pwm: &mut gpio::OutputPin, mes: &ControlMes) -> Result<()> {
+    match mes.diversion {
+        Diversion::Straight => {
+            senvo_pwm.set_pwm(Duration::from_millis(20), Duration::from_micros(1250))
+        }
+        Diversion::Turn(direction) => senvo_pwm.set_pwm(
+            Duration::from_millis(20),
+            Duration::from_micros(direction as u64), // 未完成
+        ),
+    }
 }
