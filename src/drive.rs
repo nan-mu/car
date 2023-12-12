@@ -1,4 +1,5 @@
 use chrono::{DateTime, Local};
+use log4rs::{append, config, encode, filter, Logger};
 use rppal::gpio::{self, Gpio, Result};
 use std::{collections::VecDeque, thread, time::Duration};
 
@@ -44,11 +45,40 @@ pub struct ControlManger {
     senvo_pwm: gpio::OutputPin,                    // 舵机控制引脚
     motor_tasks: VecDeque<ControlMes>,
     launch_mode: LaunchMode,
+    logger: Logger,
 }
 
 impl ControlManger {
     #[doc = "初始化电机舵机，主要是初始化引脚"]
     pub fn new(launch_mode: LaunchMode) -> Self {
+        let stderr = append::console::ConsoleAppender::builder()
+            .target(append::console::Target::Stderr)
+            .build();
+        let log_file = append::file::FileAppender::builder()
+            .encoder(Box::new(encode::pattern::PatternEncoder::new(
+                "%d{ISO8601} %-5l %c:%L - %m\n",
+            )))
+            .build(format!(
+                "log/CAR_{}.log",
+                Local::now().format("%m-%d_%H-%M-%S")
+            ))
+            .unwrap();
+        let log_config = config::runtime::Config::builder()
+            .appender(config::Appender::builder().build("log_file", Box::new(log_file)))
+            .appender(
+                config::Appender::builder()
+                    .filter(Box::new(filter::threshold::ThresholdFilter::new(
+                        log::LevelFilter::Info,
+                    )))
+                    .build("stderr", Box::new(stderr)),
+            )
+            .build(
+                config::Root::builder()
+                    .appender("log_file")
+                    .appender("stderr")
+                    .build(log::LevelFilter::Trace),
+            )
+            .unwrap();
         Self {
             motor_pwm: (
                 Gpio::new().unwrap().get(20).unwrap().into_output_low(),
@@ -57,6 +87,7 @@ impl ControlManger {
             senvo_pwm: Gpio::new().unwrap().get(28).unwrap().into_output(),
             motor_tasks: VecDeque::new(),
             launch_mode,
+            logger: Logger::new(log_config),
         }
     }
     #[doc = "启动调度器"]
