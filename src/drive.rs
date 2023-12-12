@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local};
 use rppal::gpio::{self, Gpio, Result};
-use std::{thread, time::Duration};
+use std::{collections::VecDeque, thread, time::Duration};
 
 /// 包含电机的驱动和舵机的驱动。同时包含一个运动调度。
 /// 这里所有的控制信号都是PWM，但由于需要使用耳机口放音乐，所以PWM信号只能找一个普通端口然后模拟输出PWM信号
@@ -42,7 +42,7 @@ pub enum LaunchMode {
 pub struct ControlManger {
     motor_pwm: (gpio::OutputPin, gpio::OutputPin), // 电机控制引脚，第一个为正向驱动引脚
     senvo_pwm: gpio::OutputPin,                    // 舵机控制引脚
-    motor_tasks: Vec<ControlMes>,
+    motor_tasks: VecDeque<ControlMes>,
     launch_mode: LaunchMode,
 }
 
@@ -55,7 +55,7 @@ impl ControlManger {
                 Gpio::new().unwrap().get(16).unwrap().into_output_low(),
             ),
             senvo_pwm: Gpio::new().unwrap().get(28).unwrap().into_output(),
-            motor_tasks: vec![],
+            motor_tasks: VecDeque::new(),
             launch_mode,
         }
     }
@@ -63,22 +63,22 @@ impl ControlManger {
     pub fn load_stats(&mut self) -> Result<()> {
         match self.launch_mode {
             LaunchMode::Debug => {
-                self.motor_tasks.push(ControlMes::new(
+                self.motor_tasks.push_front(ControlMes::new(
                     Gear::Ahead(0.1),
                     Diversion::Turn(1250),
                     Duration::from_secs(10),
                 ));
-                self.motor_tasks.push(ControlMes::new(
+                self.motor_tasks.push_front(ControlMes::new(
                     Gear::Brake,
                     Diversion::Straight,
                     Duration::from_secs(10),
                 ));
-                self.motor_tasks.push(ControlMes::new(
+                self.motor_tasks.push_front(ControlMes::new(
                     Gear::Reverse(0.1),
                     Diversion::Turn(1450),
                     Duration::from_secs(10),
                 ));
-                self.motor_tasks.push(ControlMes::new(
+                self.motor_tasks.push_front(ControlMes::new(
                     Gear::Drift,
                     Diversion::Straight,
                     Duration::from_secs(10),
@@ -91,25 +91,16 @@ impl ControlManger {
     }
     pub fn launch(&mut self) {
         self.load_stats().unwrap();
-        run_motor(
-            &mut self.motor_pwm,
-            &ControlMes::new(
-                Gear::Ahead(1.0),
-                Diversion::Turn(1250),
-                Duration::from_secs(10),
-            ),
-        )
-        .unwrap();
-        run_senvo(
-            &mut self.senvo_pwm,
-            &ControlMes::new(
-                Gear::Ahead(1.0),
-                Diversion::Turn(1250),
-                Duration::from_secs(10),
-            ),
-        )
-        .unwrap();
-        thread::sleep(self.motor_tasks[0].duration);
+        while !self.motor_tasks.is_empty() {
+            let task = self
+                .motor_tasks
+                .front()
+                .expect("运动任务列表已空但仍进入轮询");
+            run_motor(&mut self.motor_pwm, task).unwrap();
+            run_senvo(&mut self.senvo_pwm, task).unwrap();
+            thread::sleep(self.motor_tasks[0].duration);
+            self.motor_tasks.pop_front().expect("弹出任务失败");
+        }
     }
     pub fn reset(mut self) -> Self {
         self.motor_pwm = (
