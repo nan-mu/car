@@ -1,8 +1,9 @@
-#[warn(dead_code)]
-/// 包含电机的驱动和舵机的驱动。同时包含一个运动调度。
-/// 这里所有的控制信号都是PWM，但由于需要使用耳机口放音乐，所以PWM信号只能找一个普通端口然后模拟输出PWM信号
+use chrono::{DateTime, Local};
 use rppal::gpio::{self, Gpio, Result};
 use std::{thread, time::Duration};
+
+/// 包含电机的驱动和舵机的驱动。同时包含一个运动调度。
+/// 这里所有的控制信号都是PWM，但由于需要使用耳机口放音乐，所以PWM信号只能找一个普通端口然后模拟输出PWM信号
 
 /// 挡位
 pub enum Gear {
@@ -16,6 +17,11 @@ pub enum Diversion {
     Turn(u64),
 }
 
+struct Times {
+    reg: DateTime<Local>,
+    start: DateTime<Local>,
+    fine: DateTime<Local>,
+}
 pub struct ControlMes {
     /// 控制模式
     mode: Gear,
@@ -23,7 +29,8 @@ pub struct ControlMes {
     diversion: Diversion,
     /// 控制信号持续时间
     duration: Duration,
-    /// 任务执行时间
+    /// 任务的注册，运行，弹出（被打断和完整完成）的时间
+    date: Times,
 }
 
 pub enum LaunchMode {
@@ -149,6 +156,11 @@ impl ControlMes {
             mode,
             diversion,
             duration,
+            date: Times {
+                reg: Local::now(),
+                start: Local::now(),
+                fine: Local::now(),
+            },
         }
     }
 }

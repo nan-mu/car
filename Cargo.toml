@@ -10,5 +10,6 @@ unused-locals = "deny"
 
 
 [dependencies]
+chrono = "0.4.31"
 num = "0.4.1"
 rppal = "0.15.0"
