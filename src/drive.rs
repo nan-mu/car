@@ -1,4 +1,5 @@
 use chrono::{DateTime, Local};
+use log::info;
 use log4rs::{append, config, encode, filter, Logger};
 use rppal::gpio::{self, Gpio, Result};
 use std::{collections::VecDeque, thread, time::Duration};
@@ -45,7 +46,6 @@ pub struct ControlManger {
     senvo_pwm: gpio::OutputPin,                    // 舵机控制引脚
     motor_tasks: VecDeque<ControlMes>,
     launch_mode: LaunchMode,
-    logger: Logger,
 }
 
 impl ControlManger {
@@ -56,7 +56,7 @@ impl ControlManger {
             .build();
         let log_file = append::file::FileAppender::builder()
             .encoder(Box::new(encode::pattern::PatternEncoder::new(
-                "%d{ISO8601} %-5l %c:%L - %m\n",
+                "[{l}][{d(%Y-%m-%d %H:%M:%S %Z)(local)}] - {m}\n",
             )))
             .build(format!(
                 "log/CAR_{}.log",
@@ -79,6 +79,8 @@ impl ControlManger {
                     .build(log::LevelFilter::Trace),
             )
             .unwrap();
+        let _handler = log4rs::init_config(log_config).unwrap();
+        info!("创建控制管理器");
         Self {
             motor_pwm: (
                 Gpio::new().unwrap().get(20).unwrap().into_output_low(),
@@ -87,32 +89,32 @@ impl ControlManger {
             senvo_pwm: Gpio::new().unwrap().get(28).unwrap().into_output(),
             motor_tasks: VecDeque::new(),
             launch_mode,
-            logger: Logger::new(log_config),
         }
     }
     #[doc = "启动调度器"]
     pub fn load_stats(&mut self) -> Result<()> {
+        info!("启动调度器");
         match self.launch_mode {
             LaunchMode::Debug => {
                 self.motor_tasks.push_front(ControlMes::new(
                     Gear::Ahead(0.1),
                     Diversion::Turn(1250),
-                    Duration::from_secs(10),
+                    Duration::from_secs(1),
                 ));
                 self.motor_tasks.push_front(ControlMes::new(
                     Gear::Brake,
                     Diversion::Straight,
-                    Duration::from_secs(10),
+                    Duration::from_secs(1),
                 ));
                 self.motor_tasks.push_front(ControlMes::new(
                     Gear::Reverse(0.1),
                     Diversion::Turn(1450),
-                    Duration::from_secs(10),
+                    Duration::from_secs(1),
                 ));
                 self.motor_tasks.push_front(ControlMes::new(
                     Gear::Drift,
                     Diversion::Straight,
-                    Duration::from_secs(10),
+                    Duration::from_secs(1),
                 ));
             }
             LaunchMode::DeadWhell => {}
