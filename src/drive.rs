@@ -42,6 +42,7 @@ pub struct ControlMes {
 pub enum LaunchMode {
     Sleep,
     Debug,
+    Brake,
     DeadWhell,
 }
 
@@ -90,7 +91,7 @@ impl ControlManger {
                 Gpio::new().unwrap().get(20).unwrap().into_output_low(),
                 Gpio::new().unwrap().get(16).unwrap().into_output_low(),
             ),
-            senvo_pwm: Gpio::new().unwrap().get(28).unwrap().into_output(),
+            senvo_pwm: Gpio::new().unwrap().get(12).unwrap().into_output(),
             motor_tasks: VecDeque::new(),
             launch_mode,
         }
@@ -100,27 +101,33 @@ impl ControlManger {
         match self.launch_mode {
             LaunchMode::Debug => {
                 info!("任务添加：调试模式");
-                self.motor_tasks.push_front(ControlMes::new(
-                    Gear::Ahead(0.1),
-                    Diversion::Turn(1250),
-                    Duration::seconds(1),
-                ));
-                self.motor_tasks.push_front(ControlMes::new(
+                for step in 1..=10 {
+                    self.motor_tasks.push_back(ControlMes::new(
+                        Gear::Ahead(step as f64 / 10.0),
+                        Diversion::Turn(2000),
+                        Duration::seconds(5),
+                    ));
+                }
+            }
+            LaunchMode::Brake => {
+                info!("任务添加：制动模式");
+                let killed_task = self.motor_tasks.pop_front().unwrap();
+                let last_time = killed_task.duration
+                    - killed_task.date.start.signed_duration_since(Local::now());
+                self.motor_tasks.push_back(ControlMes::new(
+                    //发出信号，没有添加花活
                     Gear::Brake,
                     Diversion::Straight,
-                    Duration::seconds(1),
+                    Duration::seconds(10),
                 ));
-                self.motor_tasks.push_front(ControlMes::new(
-                    Gear::Reverse(0.1),
-                    Diversion::Turn(1450),
-                    Duration::seconds(1),
-                ));
-                self.motor_tasks.push_front(ControlMes::new(
-                    Gear::Drift,
+                self.motor_tasks.push_back(ControlMes::new(
+                    //发出信号
+                    killed_task.mode,
                     Diversion::Straight,
-                    Duration::seconds(1),
+                    last_time,
                 ));
             }
+
             LaunchMode::DeadWhell => (),
             LaunchMode::Sleep => (),
         };
@@ -205,7 +212,7 @@ fn run_senvo(senvo_pwm: &mut gpio::OutputPin, mes: &ControlMes) -> Result<()> {
     match mes.diversion {
         Diversion::Straight => senvo_pwm.set_pwm(
             Duration::milliseconds(20).to_std().unwrap(),
-            Duration::microseconds(1250).to_std().unwrap(),
+            Duration::microseconds(1450).to_std().unwrap(),
         ),
         Diversion::Turn(direction) => senvo_pwm.set_pwm(
             Duration::milliseconds(20).to_std().unwrap(),
