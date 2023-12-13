@@ -22,12 +22,14 @@ pub enum Diversion {
     Turn(u64),
 }
 
+#[derive(Debug)]
 struct Times {
     reg: DateTime<Local>,
     start: DateTime<Local>,
     fine: DateTime<Local>,
 }
 
+#[derive(Debug)]
 pub struct ControlMes {
     /// 控制模式
     mode: Gear,
@@ -140,15 +142,8 @@ impl ControlManger {
                 .motor_tasks
                 .front()
                 .expect("运动任务列表已空但仍进入轮询");
-            info!(
-                "发送电机执行任务：{:?}, 持续时间：{}",
-                task.mode, task.duration
-            );
+            info!("发送电机执行任务：{:?}", task);
             run_motor(&mut self.motor_pwm, task).unwrap();
-            info!(
-                "发送舵机执行任务：{:?}, 持续时间：{}，角度：{:?}",
-                task.mode, task.duration, task.diversion
-            );
             run_senvo(&mut self.senvo_pwm, task).unwrap();
             thread::sleep(self.motor_tasks[0].duration.to_std().unwrap());
             self.motor_tasks.pop_front().expect("弹出任务失败");
