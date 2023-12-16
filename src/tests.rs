@@ -8,13 +8,25 @@ fn test_drive() {
 
 #[test]
 fn test_pwm() {
+    //需要测试多组频率下电机控制器的表现
     use rppal::gpio::Gpio;
-    let mut sd = Gpio::new().unwrap().get(4).unwrap();
-    sd.into_output_low();
-    let mut pwm = crate::pwm::Pwm::new(sd);
-    pwm.set_duty_cycle(0.5);
-    pwm.set_period(1.0);
-    pwm.set_frequency(1.0);
+    let mut sd = (
+        Gpio::new().unwrap().get(20).unwrap().into_output(),
+        Gpio::new().unwrap().get(16).unwrap().into_output(),
+    );
+    sd.0.set_pwm_frequency(30 as f64, 0.5).unwrap();
+    sd.1.set_pwm_frequency(30 as f64, 0.0).unwrap();
+}
+
+#[test]
+fn test_drv8701() {
+    use rppal::gpio::Gpio;
+    let mut sd = (
+        Gpio::new().unwrap().get(20).unwrap().into_output(),
+        Gpio::new().unwrap().get(16).unwrap().into_output(),
+    );
+    sd.0.set_pwm_frequency(30 as f64, 0.5).unwrap(); // 20 接 PWM
+    sd.1.set_low(); // 16 接 IO
 }
 
 // #[test]
