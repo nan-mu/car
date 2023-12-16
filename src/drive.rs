@@ -107,7 +107,7 @@ impl ControlManger {
                     self.motor_tasks.push_back(ControlMes::new(
                         Gear::Ahead(step as f64 / 10.0),
                         Diversion::Turn(2000),
-                        Duration::seconds(5),
+                        Duration::seconds(10),
                     ));
                 }
             }
