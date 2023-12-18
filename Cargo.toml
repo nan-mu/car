@@ -10,8 +10,8 @@ unused-locals = "deny"
 
 
 [dependencies]
-chrono = "0.4.31"
-log = "0.4.20"
-log4rs = "1.2.0"
-num = "0.4.1"
-rppal = "0.15.0"
+chrono = "~0.4.31"
+log = "~0.4.20"
+log4rs = "~1.2.0"
+num = "~0.4.1"
+rppal = "~0.15.0"
