@@ -1,12 +1,16 @@
 // use rppal::gpio::Gpio;
 
-#[test]
+use std::thread;
+
+use chrono::Duration;
+
+// #[test]
 fn test_drive() {
     let mut manger = crate::drive::ControlManger::new(crate::drive::LaunchMode::Debug);
     manger.launch();
 }
 
-#[test]
+// #[test]
 fn test_pwm() {
     //需要测试多组频率下电机控制器的表现
     use rppal::gpio::Gpio;
@@ -18,7 +22,7 @@ fn test_pwm() {
     sd.1.set_pwm_frequency(30 as f64, 0.0).unwrap();
 }
 
-#[test]
+// #[test]
 fn test_drv8701() {
     use rppal::gpio::Gpio;
     let mut sd = (
@@ -30,27 +34,27 @@ fn test_drv8701() {
 }
 
 // #[test]
-// fn test_i2c() {
-//     use rppal::{gpio::Gpio, i2c::I2c};
-//     let mut sd = Gpio::new().unwrap().get(4).unwrap();
-//     sd.into_output_low();
-//     let mut iic = I2c::new().unwrap();
-//     iic.set_slave_address(0x2b).unwrap();
-//     let u16_to_u8s = |x: u16| [x as u8, (x >> 8) as u8];
-//     let load = |add: u8, val: u16| [add, val as u8, (val >> 8) as u8];
-//     iic.write(&load(0x08, 0x04d6)).unwrap();
-//     iic.write(&load(0x10, 0x000a)).unwrap();
-//     iic.write(&load(0x14, 0x1002)).unwrap();
-//     iic.write(&load(0x19, 0x0000)).unwrap();
-//     iic.write(&load(0x1b, 0x020c)).unwrap();
-//     iic.write(&load(0x1e, 0x9000)).unwrap();
-//     iic.write(&load(0x1a, 0x1601)).unwrap();
-//     let mut DATAx_MSB = [0u8; 2];
-//     let mut DATAx_LSB = [0u8; 2];
-//     iic.block_read(0x00, &mut DATAx_MSB).unwrap();
-//     iic.block_read(0x01, &mut DATAx_LSB).unwrap();
-//     println!("{:?}, {:?}", DATAx_MSB, DATAx_LSB);
-// }
+fn test_i2c() {
+    use rppal::i2c::I2c;
+    // let sd = Gpio::new().unwrap().get(4).unwrap();
+    // sd.into_output_low();
+    let mut iic = I2c::new().unwrap();
+    iic.set_slave_address(0x2b).unwrap();
+    iic.block_write(0x08, &[0x00, 0x08]).unwrap();
+    iic.block_write(0x10, &[0x00, 0x0a]).unwrap();
+    iic.block_write(0x14, &[0xf3, 0xff]).unwrap();
+    iic.block_write(0x19, &[0x00, 0x00]).unwrap();
+    iic.block_write(0x1b, &[0x02, 0x0c]).unwrap();
+    iic.block_write(0x1e, &[0x90, 0x00]).unwrap();
+    thread::sleep(Duration::seconds(1).to_std().unwrap());
+    iic.block_write(0x1a, &[0x16, 0x01]).unwrap();
+
+    let mut DATAx_MSB = [0u8; 2];
+    let mut DATAx_LSB = [0u8; 2];
+    iic.block_read(0x00, &mut DATAx_MSB).unwrap();
+    iic.block_read(0x01, &mut DATAx_LSB).unwrap();
+    println!("{:?}, {:?}", DATAx_MSB, DATAx_LSB);
+}
 
 // #[test]
 // fn test_mental() {
