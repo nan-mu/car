@@ -135,20 +135,25 @@ impl ControlManger {
             }
             LaunchMode::DeadWhell => {
                 //任务，160cm直线，80cm转弯180°，40cm转弯45°，40cm转弯180°，40cm转弯45°
-                self.motor_tasks.push_back(ControlMes::new(
-                    Gear::Ahead(0.3),
-                    Diversion::Straight,
-                    Duration::from_millis(1000),
-                ));
                 // self.motor_tasks.push_back(ControlMes::new(
-                //     Gear::Ahead(0.8),
-                //     Diversion::Turn(1100),
-                //     Duration::from_millis(1300),
+                //     Gear::Ahead(0.3),
+                //     Diversion::Straight,
+                //     Duration::from_millis(3150),
                 // ));
                 // self.motor_tasks.push_back(ControlMes::new(
-                //     Gear::Ahead(0.8),
-                //     Diversion::Turn(1300),
-                //     Duration::from_millis(100),
+                //     Gear::Ahead(0.0),
+                //     Diversion::Straight,
+                //     Duration::from_millis(2000),
+                // ));
+                // self.motor_tasks.push_back(ControlMes::new(
+                //     Gear::Ahead(0.0),
+                //     Diversion::Turn(900),
+                //     Duration::from_millis(2000),
+                // ));
+                // self.motor_tasks.push_back(ControlMes::new(
+                //     Gear::Ahead(0.4),
+                //     Diversion::Turn(1050),
+                //     Duration::from_millis(2500),
                 // ));
             }
             LaunchMode::Sleep => (),
@@ -162,20 +167,20 @@ impl ControlManger {
                 .motor_tasks
                 .front()
                 .expect("运动任务列表已空但仍进入轮询");
-            let mental = thread::spawn(|| loop {
-                let mental_pin = Gpio::new().unwrap().get(12).unwrap().into_input_pullup();
-                match mental_pin.read() {
-                    Level::Low => {
-                        info!("找到金属！")
-                    }
-                    _ => (),
-                }
-            });
+            // let mental = thread::spawn(|| loop {
+            //     let mental_pin = Gpio::new().unwrap().get(12).unwrap().into_input_pullup();
+            //     match mental_pin.read() {
+            //         Level::Low => {
+            //             info!("找到金属！")
+            //         }
+            //         _ => (),
+            //     }
+            // });
             info!("发送电机执行任务：{:?}", task);
             run_motor(&mut self.motor_pwm, task).unwrap();
             run_senvo(&mut self.senvo_pwm, task).unwrap();
             thread::sleep(self.motor_tasks[0].duration);
-            mental.join().unwrap();
+            // mental.join().unwrap();
             self.motor_tasks.pop_front().expect("弹出任务失败");
         }
     }
@@ -227,7 +232,7 @@ fn run_motor(motor_pwm: &mut (gpio::OutputPin, gpio::OutputPin), mes: &ControlMe
 fn run_senvo(senvo_pwm: &mut gpio::OutputPin, mes: &ControlMes) -> Result<()> {
     match mes.diversion {
         Diversion::Straight => {
-            senvo_pwm.set_pwm(Duration::from_millis(20), Duration::from_micros(1200))
+            senvo_pwm.set_pwm(Duration::from_millis(20), Duration::from_micros(1250))
         }
         Diversion::Turn(direction) => senvo_pwm.set_pwm(
             Duration::from_millis(20),
