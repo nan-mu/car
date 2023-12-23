@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use log::info;
 use log4rs::{append, config, encode, filter};
-use rppal::gpio::{self, Gpio, Result};
+use rppal::gpio::{self, Gpio, Level, Result};
 use std::collections::VecDeque;
 use std::thread;
 use std::time::Duration;
@@ -134,8 +134,9 @@ impl ControlManger {
                 ));
             }
             LaunchMode::DeadWhell => {
+                //任务，160cm直线，80cm转弯180°，40cm转弯45°，40cm转弯180°，40cm转弯45°
                 self.motor_tasks.push_back(ControlMes::new(
-                    Gear::Ahead(0.8),
+                    Gear::Ahead(0.3),
                     Diversion::Straight,
                     Duration::from_millis(1000),
                 ));
@@ -161,10 +162,20 @@ impl ControlManger {
                 .motor_tasks
                 .front()
                 .expect("运动任务列表已空但仍进入轮询");
+            let mental = thread::spawn(|| loop {
+                let mental_pin = Gpio::new().unwrap().get(12).unwrap().into_input_pullup();
+                match mental_pin.read() {
+                    Level::Low => {
+                        info!("找到金属！")
+                    }
+                    _ => (),
+                }
+            });
             info!("发送电机执行任务：{:?}", task);
             run_motor(&mut self.motor_pwm, task).unwrap();
             run_senvo(&mut self.senvo_pwm, task).unwrap();
             thread::sleep(self.motor_tasks[0].duration);
+            mental.join().unwrap();
             self.motor_tasks.pop_front().expect("弹出任务失败");
         }
     }
