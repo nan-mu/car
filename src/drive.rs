@@ -1,8 +1,12 @@
+use crate::view::{ana, take_photo};
 use chrono::{DateTime, Duration, Local};
 use log::info;
 use log4rs::{append, config, encode, filter};
 use rppal::gpio::{self, Gpio, Result};
-use std::{collections::VecDeque, thread};
+use std::collections::VecDeque;
+use std::sync::atomic::AtomicUsize;
+use std::sync::{Mutex, MutexGuard};
+use std::thread;
 
 /// 包含电机的驱动和舵机的驱动。同时包含一个运动调度。
 /// 这里所有的控制信号都是PWM，但由于需要使用耳机口放音乐，所以PWM信号只能找一个普通端口然后模拟输出PWM信号
@@ -10,16 +14,16 @@ use std::{collections::VecDeque, thread};
 /// 挡位
 #[derive(Debug)]
 pub enum Gear {
-    Drift,        // 漂移，PWM=(0,0)
-    Ahead(f64),   // 前进，PWM=(1,0)，数值为油门，即使能通道的占空比，0.0~1.0
-    Reverse(f64), // 倒车，PWM=(0,1)，数值为油门，即使能通道的占空比，0.0~1.0
-    Brake,        // 制动，PWM=(1,1)
+    Drift,      // 漂移，PWM=(0,0)
+    Ahead(f64), // 前进，PWM=(1,0)，数值为油门，即使能通道的占空比，0.0~1.0
+    Brake,      // 制动，PWM=(1,1)
 }
 
 #[derive(Debug)]
 pub enum Diversion {
     Straight,
     Turn(u64),
+    Fix,
 }
 
 #[derive(Debug)]
@@ -103,13 +107,11 @@ impl ControlManger {
         match self.launch_mode {
             LaunchMode::Debug => {
                 info!("任务添加：调试模式");
-                for step in 1..=10 {
-                    self.motor_tasks.push_back(ControlMes::new(
-                        Gear::Ahead(step as f64 / 10.0),
-                        Diversion::Turn(2000),
-                        Duration::seconds(10),
-                    ));
-                }
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.4),
+                    Diversion::Turn(1400),
+                    Duration::seconds(1),
+                ));
             }
             LaunchMode::Brake => {
                 info!("任务添加：制动模式");
@@ -129,8 +131,7 @@ impl ControlManger {
                     last_time,
                 ));
             }
-
-            LaunchMode::DeadWhell => (),
+            LaunchMode::DeadWhell => {}
             LaunchMode::Sleep => (),
         };
         Ok(())
@@ -191,10 +192,6 @@ fn run_motor(motor_pwm: &mut (gpio::OutputPin, gpio::OutputPin), mes: &ControlMe
             motor_pwm.0.set_pwm_frequency(50 as f64, accelerator)?;
             motor_pwm.1.write(gpio::Level::Low);
         }
-        Gear::Reverse(accelerator) => {
-            motor_pwm.1.set_pwm_frequency(50 as f64, accelerator)?;
-            motor_pwm.0.write(gpio::Level::Low);
-        }
         Gear::Brake => {
             motor_pwm.0.write(gpio::Level::High);
             motor_pwm.1.write(gpio::Level::High);
@@ -207,11 +204,22 @@ fn run_senvo(senvo_pwm: &mut gpio::OutputPin, mes: &ControlMes) -> Result<()> {
     match mes.diversion {
         Diversion::Straight => senvo_pwm.set_pwm(
             Duration::milliseconds(20).to_std().unwrap(),
-            Duration::microseconds(1450).to_std().unwrap(),
+            Duration::microseconds(1200).to_std().unwrap(),
         ),
         Diversion::Turn(direction) => senvo_pwm.set_pwm(
             Duration::milliseconds(20).to_std().unwrap(),
             Duration::microseconds(direction as i64).to_std().unwrap(), // 未完成
         ),
+        Diversion::Fix => {
+            take_photo();
+            let res = ana();
+            let upto = 200;
+            senvo_pwm.set_pwm(
+                Duration::milliseconds(20).to_std().unwrap(),
+                Duration::microseconds(1200 + res.0 as i64 / upto - res.1 as i64 / upto)
+                    .to_std()
+                    .unwrap(), // 未完成
+            )
+        }
     }
 }
