@@ -41,3 +41,35 @@ fn test_mental() {
         println!("{:?}", mental.read());
     }
 }
+
+// use rocket::{
+//     http::{Request, Response},
+//     routes,
+// };
+
+// use std::cmp::Ordering;
+// use std::fs::read_to_string;
+// use std::path::PathBuf;
+
+// #[get("/")]
+// fn index(req: Request) -> Response {
+//     let mut log_files = vec![];
+//     for entry in std::fs::read_dir("./log").unwrap() {
+//         let path = entry.unwrap().path();
+//         let filename = path.file_name().unwrap().to_str().unwrap();
+//         let timestamp = filename[4..14].parse::<u64>().unwrap();
+//         log_files.push((timestamp, path));
+//     }
+
+//     log_files.sort_by(|a, b| a.0.cmp(&b.0));
+
+//     let (timestamp, log_file) = log_files.pop().unwrap();
+//     let log_contents = read_to_string(log_file).unwrap();
+
+//     Response::new(log_contents)
+// }
+
+// #[test]
+// fn test_server() {
+//     rocket::ignite().mount("/", routes![index]).launch();
+// }

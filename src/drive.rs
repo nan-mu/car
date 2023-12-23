@@ -135,26 +135,81 @@ impl ControlManger {
             }
             LaunchMode::DeadWhell => {
                 //任务，160cm直线，80cm转弯180°，40cm转弯45°，40cm转弯180°，40cm转弯45°
-                // self.motor_tasks.push_back(ControlMes::new(
-                //     Gear::Ahead(0.3),
-                //     Diversion::Straight,
-                //     Duration::from_millis(3150),
-                // ));
-                // self.motor_tasks.push_back(ControlMes::new(
-                //     Gear::Ahead(0.0),
-                //     Diversion::Straight,
-                //     Duration::from_millis(2000),
-                // ));
-                // self.motor_tasks.push_back(ControlMes::new(
-                //     Gear::Ahead(0.0),
-                //     Diversion::Turn(900),
-                //     Duration::from_millis(2000),
-                // ));
-                // self.motor_tasks.push_back(ControlMes::new(
-                //     Gear::Ahead(0.4),
-                //     Diversion::Turn(1050),
-                //     Duration::from_millis(2500),
-                // ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    //160cm直线
+                    Gear::Ahead(0.4),
+                    Diversion::Straight,
+                    Duration::from_millis(2150),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.0),
+                    Diversion::Straight,
+                    Duration::from_millis(1000),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.0),
+                    Diversion::Turn(900),
+                    Duration::from_millis(1000),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    //80cm转弯180°
+                    Gear::Ahead(0.39),
+                    Diversion::Turn(1020),
+                    Duration::from_millis(2550),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.0),
+                    Diversion::Turn(1050),
+                    Duration::from_millis(1000),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.0),
+                    Diversion::Turn(900),
+                    Duration::from_millis(1000),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    //40cm转弯45°
+                    Gear::Ahead(1.0),
+                    Diversion::Turn(900),
+                    Duration::from_millis(450),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.0),
+                    Diversion::Turn(900),
+                    Duration::from_millis(500),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.0),
+                    Diversion::Turn(1650),
+                    Duration::from_millis(500),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    //40cm转弯180°
+                    Gear::Ahead(1.0),
+                    Diversion::Turn(1700),
+                    Duration::from_millis(860),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.0),
+                    Diversion::Turn(1700),
+                    Duration::from_millis(1000),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.0),
+                    Diversion::Turn(900),
+                    Duration::from_millis(500),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    //40cm转弯45°
+                    Gear::Ahead(1.0),
+                    Diversion::Turn(800),
+                    Duration::from_millis(500),
+                ));
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.0),
+                    Diversion::Straight,
+                    Duration::from_millis(500),
+                ));
             }
             LaunchMode::Sleep => (),
         };
@@ -179,7 +234,13 @@ impl ControlManger {
             info!("发送电机执行任务：{:?}", task);
             run_motor(&mut self.motor_pwm, task).unwrap();
             run_senvo(&mut self.senvo_pwm, task).unwrap();
-            thread::sleep(self.motor_tasks[0].duration);
+            let 未来 = Local::now() + self.motor_tasks[0].duration;
+            while Local::now() < 未来 {
+                let mental = Gpio::new().unwrap().get(12).unwrap().into_input_pullup();
+                if mental.read() == Level::Low {
+                    info!("找到金属");
+                }
+            }
             // mental.join().unwrap();
             self.motor_tasks.pop_front().expect("弹出任务失败");
         }
