@@ -1,12 +1,10 @@
-use crate::view::{ana, take_photo};
-use chrono::{DateTime, Duration, Local};
+use chrono::{DateTime, Local};
 use log::info;
 use log4rs::{append, config, encode, filter};
 use rppal::gpio::{self, Gpio, Result};
 use std::collections::VecDeque;
-use std::sync::atomic::AtomicUsize;
-use std::sync::{Mutex, MutexGuard};
 use std::thread;
+use std::time::Duration;
 
 /// 包含电机的驱动和舵机的驱动。同时包含一个运动调度。
 /// 这里所有的控制信号都是PWM，但由于需要使用耳机口放音乐，所以PWM信号只能找一个普通端口然后模拟输出PWM信号
@@ -23,7 +21,6 @@ pub enum Gear {
 pub enum Diversion {
     Straight,
     Turn(u64),
-    Fix,
 }
 
 #[derive(Debug)]
@@ -97,7 +94,7 @@ impl ControlManger {
                 Gpio::new().unwrap().get(20).unwrap().into_output_low(),
                 Gpio::new().unwrap().get(16).unwrap().into_output_low(),
             ),
-            senvo_pwm: Gpio::new().unwrap().get(12).unwrap().into_output(),
+            senvo_pwm: Gpio::new().unwrap().get(23).unwrap().into_output(),
             motor_tasks: VecDeque::new(),
             launch_mode,
         }
@@ -110,19 +107,24 @@ impl ControlManger {
                 self.motor_tasks.push_back(ControlMes::new(
                     Gear::Ahead(0.4),
                     Diversion::Turn(1400),
-                    Duration::seconds(1),
+                    Duration::from_secs(1),
                 ));
             }
             LaunchMode::Brake => {
                 info!("任务添加：制动模式");
                 let killed_task = self.motor_tasks.pop_front().unwrap();
                 let last_time = killed_task.duration
-                    - killed_task.date.start.signed_duration_since(Local::now());
+                    - killed_task
+                        .date
+                        .start
+                        .signed_duration_since(Local::now())
+                        .to_std()
+                        .unwrap();
                 self.motor_tasks.push_back(ControlMes::new(
                     //发出信号，没有添加花活
                     Gear::Brake,
                     Diversion::Straight,
-                    Duration::seconds(10),
+                    Duration::from_secs(10),
                 ));
                 self.motor_tasks.push_back(ControlMes::new(
                     //发出信号
@@ -131,7 +133,23 @@ impl ControlManger {
                     last_time,
                 ));
             }
-            LaunchMode::DeadWhell => {}
+            LaunchMode::DeadWhell => {
+                self.motor_tasks.push_back(ControlMes::new(
+                    Gear::Ahead(0.8),
+                    Diversion::Straight,
+                    Duration::from_millis(1000),
+                ));
+                // self.motor_tasks.push_back(ControlMes::new(
+                //     Gear::Ahead(0.8),
+                //     Diversion::Turn(1100),
+                //     Duration::from_millis(1300),
+                // ));
+                // self.motor_tasks.push_back(ControlMes::new(
+                //     Gear::Ahead(0.8),
+                //     Diversion::Turn(1300),
+                //     Duration::from_millis(100),
+                // ));
+            }
             LaunchMode::Sleep => (),
         };
         Ok(())
@@ -146,7 +164,7 @@ impl ControlManger {
             info!("发送电机执行任务：{:?}", task);
             run_motor(&mut self.motor_pwm, task).unwrap();
             run_senvo(&mut self.senvo_pwm, task).unwrap();
-            thread::sleep(self.motor_tasks[0].duration.to_std().unwrap());
+            thread::sleep(self.motor_tasks[0].duration);
             self.motor_tasks.pop_front().expect("弹出任务失败");
         }
     }
@@ -176,11 +194,6 @@ impl ControlMes {
     }
 }
 
-#[doc = "该函数计算路程所需的时间，具体内容有待实验数据"]
-fn route2duration(lenght: i64) -> Duration {
-    Duration::microseconds(lenght / 60)
-}
-
 #[doc = "电机需要两路PWM，计划使用P20，P16，供电板上标记为P28,P2。然后控制使用百分比，因为这是油门的参数"]
 fn run_motor(motor_pwm: &mut (gpio::OutputPin, gpio::OutputPin), mes: &ControlMes) -> Result<()> {
     match mes.mode {
@@ -202,24 +215,12 @@ fn run_motor(motor_pwm: &mut (gpio::OutputPin, gpio::OutputPin), mes: &ControlMe
 #[doc = "控制电机只需要一路PWM，板载5V驱动，总共三个脚"]
 fn run_senvo(senvo_pwm: &mut gpio::OutputPin, mes: &ControlMes) -> Result<()> {
     match mes.diversion {
-        Diversion::Straight => senvo_pwm.set_pwm(
-            Duration::milliseconds(20).to_std().unwrap(),
-            Duration::microseconds(1200).to_std().unwrap(),
-        ),
-        Diversion::Turn(direction) => senvo_pwm.set_pwm(
-            Duration::milliseconds(20).to_std().unwrap(),
-            Duration::microseconds(direction as i64).to_std().unwrap(), // 未完成
-        ),
-        Diversion::Fix => {
-            take_photo();
-            let res = ana();
-            let upto = 200;
-            senvo_pwm.set_pwm(
-                Duration::milliseconds(20).to_std().unwrap(),
-                Duration::microseconds(1200 + res.0 as i64 / upto - res.1 as i64 / upto)
-                    .to_std()
-                    .unwrap(), // 未完成
-            )
+        Diversion::Straight => {
+            senvo_pwm.set_pwm(Duration::from_millis(20), Duration::from_micros(1200))
         }
+        Diversion::Turn(direction) => senvo_pwm.set_pwm(
+            Duration::from_millis(20),
+            Duration::from_micros(direction), // 未完成
+        ),
     }
 }
